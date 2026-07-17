@@ -1,5 +1,7 @@
 ---
 import '../styles/global.css';
+// 👇 Importa el botón flotante
+import WhatsAppButton from '../components/WhatsAppButton.astro';
 
 interface Props {
 	title?: string;
@@ -38,5 +40,8 @@ const {
 				<p>Base desarrollada con Astro</p>
 			</div>
 		</footer>
+
+		<!-- 🔵 Botón flotante de WhatsApp (siempre visible) -->
+		<WhatsAppButton />
 	</body>
 </html>
