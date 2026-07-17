@@ -85,24 +85,29 @@ const normalizeLookupText = (value: string) =>
     .replace(/\s+/g, ' ')
     .trim();
 
+// ✅ FUNCIÓN MODIFICADA: Ahora acepta JSON con base64
 const parseOrderBody = async (request: Request): Promise<OrderInput | null> => {
-  const contentType = request.headers.get('content-type') ?? '';
-
-  if (contentType.includes('multipart/form-data')) {
-    const form = await request.formData();
-    const receipt = form.get('receipt');
-
-    return {
-      gameSlug: form.get('gameSlug'),
-      productLabel: form.get('productLabel'),
-      playerId: form.get('playerId'),
-      paymentMethod: form.get('paymentMethod'),
-      receiptFile: receipt instanceof File ? receipt : null,
-    };
-  }
-
   try {
-    return (await request.json()) as OrderInput;
+    const data = await request.json();
+    
+    // Si viene con base64, convertirlo a File
+    let receiptFile = null;
+    if (data.receiptBase64) {
+      // Convertir base64 a Blob
+      const response = await fetch(data.receiptBase64);
+      const blob = await response.blob();
+      receiptFile = new File([blob], data.receiptName || 'receipt.png', { 
+        type: data.receiptType || 'image/png' 
+      });
+    }
+    
+    return {
+      gameSlug: data.gameSlug,
+      productLabel: data.productLabel,
+      playerId: data.playerId,
+      paymentMethod: data.paymentMethod,
+      receiptFile: receiptFile
+    };
   } catch {
     return null;
   }
