@@ -1,8 +1,7 @@
 import type { APIRoute } from 'astro';
-import { mkdir, writeFile } from 'node:fs/promises';
-import { join } from 'node:path';
 import { games } from '../../data/games';
 import { getMergedGames } from '../../data/catalog';
+import { supabaseServer } from '../../lib/supabaseServer';
 import {
   listGameOverrides,
   saveGameOverrides,
@@ -81,17 +80,28 @@ export const PUT: APIRoute = async ({ request }) => {
     return jsonResponse({ success: false, message: 'Juego no encontrado.' }, 404);
   }
 
-  const uploadsDir = join(process.cwd(), 'public', 'games');
-  await mkdir(uploadsDir, { recursive: true });
-
   const safeSlug = gameSlug.replace(/[^a-z0-9-]/gi, '-').toLowerCase();
-  const fileName = `${safeSlug}-${Date.now()}.${extension}`;
-  const destinationPath = join(uploadsDir, fileName);
+  const fileName = `${safeSlug}/${Date.now()}.${extension}`;
 
-  const buffer = Buffer.from(await imageField.arrayBuffer());
-  await writeFile(destinationPath, buffer);
+  const { error: uploadError } = await supabaseServer.storage
+    .from('game-covers')
+    .upload(fileName, imageField, {
+      cacheControl: '3600',
+      upsert: true,
+      contentType: imageField.type,
+    });
 
-  const image = `/games/${fileName}`;
+  if (uploadError) {
+    return jsonResponse({ success: false, message: 'No se pudo subir la portada a Supabase.' }, 500);
+  }
+
+  const { data: publicUrlData } = supabaseServer.storage.from('game-covers').getPublicUrl(fileName);
+  const image = publicUrlData.publicUrl;
+
+  if (!image) {
+    return jsonResponse({ success: false, message: 'No se pudo obtener la URL de la portada.' }, 500);
+  }
+
   const previousOverride = gameOverrides.find((item) => item.gameSlug === gameSlug);
   const nextOverrides = gameOverrides.filter((item) => item.gameSlug !== gameSlug);
 

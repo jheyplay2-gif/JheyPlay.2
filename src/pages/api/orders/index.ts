@@ -1,9 +1,8 @@
 import type { APIRoute } from 'astro';
-import { mkdir, writeFile } from 'node:fs/promises';
-import { join } from 'node:path';
 import { getMergedGames } from '../../../data/catalog';
 import { appendOrder, listOrders, type OrderRecord } from '../../../data/store';
 import { isDatabaseConfigured } from '../../../lib/db';
+import { supabaseServer } from '../../../lib/supabaseServer';
 
 export const prerender = false;
 
@@ -15,7 +14,6 @@ interface OrderInput {
   receiptFile?: File | null;
 }
 
-const receiptsDirPath = join(process.cwd(), 'public', 'receipts');
 const MAX_RECEIPT_SIZE_BYTES = 5 * 1024 * 1024;
 const ORDER_ID_PREFIX = 'JP-';
 const ORDER_ID_DIGITS = 5;
@@ -30,7 +28,7 @@ const SAMPLE_ORDERS = [
     gameName: 'Free Fire',
     playerId: '123456789',
     paymentMethod: 'pago_movil',
-    receiptUrl: '/receipts/sample-jp-00001.png',
+    receiptUrl: '',
     status: 'pendiente-validacion',
     product: {
       label: '310 Diamantes',
@@ -46,7 +44,7 @@ const SAMPLE_ORDERS = [
     gameName: 'Roblox',
     playerId: '99887766',
     paymentMethod: 'pago_movil',
-    receiptUrl: '/receipts/sample-jp-00002.png',
+    receiptUrl: '',
     status: 'pendiente-validacion',
     product: {
       label: '800 Robux',
@@ -127,14 +125,26 @@ const saveReceipt = async (receiptFile: File, orderId: string): Promise<string> 
     throw new Error('Formato de captura no permitido. Usa JPG, PNG o WEBP.');
   }
 
-  await mkdir(receiptsDirPath, { recursive: true });
-  const fileName = `receipt-${orderId}.${extension}`;
-  const destinationPath = join(receiptsDirPath, fileName);
+  const fileName = `${orderId}/receipt-${Date.now()}.${extension}`;
 
-  const buffer = Buffer.from(await receiptFile.arrayBuffer());
-  await writeFile(destinationPath, buffer);
+  const { error: uploadError } = await supabaseServer.storage
+    .from('receipts')
+    .upload(fileName, receiptFile, {
+      cacheControl: '3600',
+      upsert: true,
+      contentType: receiptFile.type,
+    });
 
-  return `/receipts/${fileName}`;
+  if (uploadError) {
+    throw new Error('No se pudo subir la captura a Supabase.');
+  }
+
+  const { data: publicUrlData } = supabaseServer.storage.from('receipts').getPublicUrl(fileName);
+  if (!publicUrlData.publicUrl) {
+    throw new Error('No se pudo obtener la URL del comprobante.');
+  }
+
+  return publicUrlData.publicUrl;
 };
 
 const generateOrderId = (orders: Array<{ id?: unknown }>) => {
