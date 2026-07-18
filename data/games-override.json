@@ -1,48 +1,48 @@
 [
   {
     "gameSlug": "league-of-legends",
-    "deleted": true,
-    "custom": false
+    "custom": false,
+    "deleted": true
   },
   {
     "gameSlug": "valorant",
-    "deleted": true,
-    "custom": false
+    "custom": false,
+    "deleted": true
   },
   {
     "gameSlug": "minecraft",
-    "deleted": true,
-    "custom": false
+    "custom": false,
+    "deleted": true
   },
   {
     "gameSlug": "rocket-league",
-    "deleted": true,
-    "custom": false
+    "custom": false,
+    "deleted": true
   },
   {
     "gameSlug": "fortnite",
     "image": "/games/fortnite-1784125450792.webp",
-    "deleted": true,
-    "custom": false
+    "custom": false,
+    "deleted": true
   },
   {
     "gameSlug": "fifa-26",
-    "deleted": true,
-    "custom": false
+    "custom": false,
+    "deleted": true
   },
   {
-    "gameSlug": "blood-striker",
-    "name": "blood striker",
-    "description": "Compra oro de forma 100% segura, instantánea y al mejor precio del mercado.",
-    "image": "/games/blood-striker-1784127123594.webp",
+    "gameSlug": "free-fire",
+    "image": "/games/free-fire-1784130208949.webp",
+    "name": "Free fire",
+    "description": "¡Equípate como un Heroico! Diamantes directos a tu ID sin riesgos. 🎮",
     "custom": true,
     "deleted": false
   },
   {
-    "gameSlug": "free-fire",
-    "name": "Free fire",
-    "description": "¡Equípate como un Heroico! Diamantes directos a tu ID sin riesgos. 🎮",
-    "image": "/games/free-fire-1784130208949.webp",
+    "gameSlug": "blood-striker",
+    "image": "/games/blood-striker-1784382968183.png",
+    "name": "blood striker",
+    "description": "Compra oro de forma 100% segura, instantánea y al mejor precio del mercado.",
     "custom": true,
     "deleted": false
   }

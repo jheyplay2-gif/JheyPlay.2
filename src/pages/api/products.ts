@@ -1,15 +1,30 @@
 import type { APIRoute } from 'astro';
-import { games } from '../../data/games';
-import { getMergedGames } from '../../data/catalog';
-import { listProductOverrides, saveProductOverrides, type ProductOverride } from '../../data/store';
+import { supabase } from '../../lib/supabaseClient';
+
+// ============================================
+// INTERFACES
+// ============================================
+interface ProductOverride {
+  gameSlug: string;
+  productLabel: string;
+  usd: number;
+  stock: number;
+  active: boolean;
+  deleted?: boolean;
+  imagen_url?: string; // 🆕 Para guardar la URL de la imagen
+}
 
 interface UpdateProductInput {
   gameSlug?: unknown;
   productLabel?: unknown;
   usd?: unknown;
   active?: unknown;
+  imagen_url?: unknown; // 🆕 Para recibir la URL de la imagen
 }
 
+// ============================================
+// HELPERS
+// ============================================
 const jsonHeaders = { 'Content-Type': 'application/json' };
 
 const jsonResponse = (body: Record<string, unknown>, status: number) =>
@@ -30,150 +45,277 @@ const getStringField = (value: unknown) => (typeof value === 'string' ? value.tr
 
 const getBooleanField = (value: unknown) => (typeof value === 'boolean' ? value : null);
 
-const getProductContext = async (gameSlug: string, productLabel: string) => {
-  const [{ mergedGames }, overrides] = await Promise.all([getMergedGames(), listProductOverrides()]);
-  const game = mergedGames.find((item) => item.slug === gameSlug);
+const getNumberField = (value: unknown) => (typeof value === 'number' ? value : null);
 
-  if (!game) {
-    return { mergedGames, overrides, game: null, product: null };
+// ============================================
+// FUNCIONES DE SUPABASE
+// ============================================
+
+// Obtener todos los productos de Supabase
+async function getProductosFromSupabase() {
+  const { data, error } = await supabase
+    .from('productos') // ← Cambia "productos" por el nombre de tu tabla
+    .select('*')
+    .order('created_at', { ascending: false });
+
+  if (error) {
+    console.error('Error al obtener productos:', error);
+    return [];
   }
 
-  const product = game.products.find((item) => item.label === productLabel) ?? null;
-  return { mergedGames, overrides, game, product };
-};
+  return data || [];
+}
 
-export const POST: APIRoute = async ({ request }) => {
-  const payload = await parseOverrideBody(request);
-  if (!payload) {
-    return jsonResponse({ success: false, message: 'Body JSON invalido.' }, 400);
-  }
+// Guardar/actualizar producto en Supabase
+async function saveProductToSupabase(product: ProductOverride) {
+  // Primero, buscar si el producto ya existe
+  const { data: existing } = await supabase
+    .from('productos')
+    .select('id')
+    .eq('game_slug', product.gameSlug)
+    .eq('product_label', product.productLabel)
+    .single();
 
-  const gameSlug = getStringField(payload.gameSlug);
-  const productLabel = getStringField(payload.productLabel);
-  const usd = typeof payload.usd === 'number' ? payload.usd : Number.NaN;
-  const active = getBooleanField(payload.active);
+  if (existing) {
+    // Actualizar producto existente
+    const { error } = await supabase
+      .from('productos')
+      .update({
+        usd: product.usd,
+        stock: product.stock,
+        active: product.active,
+        deleted: product.deleted || false,
+        imagen_url: product.imagen_url || null,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', existing.id);
 
-  if (!gameSlug || !productLabel || !Number.isFinite(usd) || active === null) {
-    return jsonResponse({ success: false, message: 'Datos invalidos para crear producto.' }, 400);
-  }
-
-  const { game, overrides } = await getProductContext(gameSlug, productLabel);
-  if (!game) {
-    return jsonResponse({ success: false, message: 'Juego no encontrado.' }, 404);
-  }
-
-  const duplicatedProduct = game.products.find((item) => item.label.toLowerCase() === productLabel.toLowerCase());
-  if (duplicatedProduct) {
-    return jsonResponse({ success: false, message: 'Ya existe un producto con ese nombre en este juego.' }, 409);
-  }
-
-  const nextOverrides = overrides.filter(
-    (item) => !(item.gameSlug === gameSlug && item.productLabel === productLabel),
-  );
-
-  const newProduct: ProductOverride = {
-    gameSlug,
-    productLabel,
-    usd,
-    stock: 0,
-    active,
-  };
-
-  nextOverrides.push(newProduct);
-  await saveProductOverrides(nextOverrides);
-
-  return jsonResponse({ success: true, message: 'Producto creado.', product: newProduct }, 201);
-};
-
-export const PUT: APIRoute = async ({ request }) => {
-  const payload = await parseOverrideBody(request);
-  if (!payload) {
-    return jsonResponse({ success: false, message: 'Body JSON invalido.' }, 400);
-  }
-
-  const gameSlug = getStringField(payload.gameSlug);
-  const productLabel = getStringField(payload.productLabel);
-  const usd = typeof payload.usd === 'number' ? payload.usd : Number.NaN;
-  const active = getBooleanField(payload.active);
-
-  if (!gameSlug || !productLabel || !Number.isFinite(usd) || active === null) {
-    return jsonResponse({ success: false, message: 'Datos invalidos para actualizar producto.' }, 400);
-  }
-
-  const { overrides, game, product } = await getProductContext(gameSlug, productLabel);
-  if (!game) {
-    return jsonResponse({ success: false, message: 'Juego no encontrado.' }, 404);
-  }
-
-  if (!product) {
-    return jsonResponse({ success: false, message: 'Producto no encontrado para este juego.' }, 404);
-  }
-
-  const updatedOverride: ProductOverride = {
-    gameSlug,
-    productLabel,
-    usd,
-    stock: 0,
-    active,
-  };
-
-  const nextOverrides = [...overrides];
-  const existingIndex = nextOverrides.findIndex(
-    (item) => item.gameSlug === gameSlug && item.productLabel === productLabel,
-  );
-
-  if (existingIndex >= 0) {
-    nextOverrides[existingIndex] = updatedOverride;
+    if (error) throw error;
+    return { success: true, message: 'Producto actualizado' };
   } else {
-    nextOverrides.push(updatedOverride);
+    // Crear nuevo producto
+    const { error } = await supabase
+      .from('productos')
+      .insert([{
+        game_slug: product.gameSlug,
+        product_label: product.productLabel,
+        usd: product.usd,
+        stock: product.stock,
+        active: product.active,
+        deleted: product.deleted || false,
+        imagen_url: product.imagen_url || null,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      }]);
+
+    if (error) throw error;
+    return { success: true, message: 'Producto creado' };
   }
+}
 
-  await saveProductOverrides(nextOverrides);
+// Eliminar producto (soft delete) en Supabase
+async function deleteProductFromSupabase(gameSlug: string, productLabel: string) {
+  const { error } = await supabase
+    .from('productos')
+    .update({
+      deleted: true,
+      active: false,
+      updated_at: new Date().toISOString()
+    })
+    .eq('game_slug', gameSlug)
+    .eq('product_label', productLabel);
 
-  return jsonResponse({ success: true, message: 'Producto actualizado.', product: updatedOverride }, 200);
+  if (error) throw error;
+  return { success: true, message: 'Producto eliminado' };
+}
+
+// ============================================
+// API ROUTES
+// ============================================
+
+// 🟢 GET - Obtener todos los productos
+export const GET: APIRoute = async () => {
+  try {
+    const productos = await getProductosFromSupabase();
+    return jsonResponse({ 
+      success: true, 
+      data: productos 
+    }, 200);
+  } catch (error) {
+    console.error('Error en GET productos:', error);
+    return jsonResponse({ 
+      success: false, 
+      message: 'Error al obtener productos' 
+    }, 500);
+  }
 };
 
-export const DELETE: APIRoute = async ({ request }) => {
-  const payload = await parseOverrideBody(request);
-  if (!payload) {
-    return jsonResponse({ success: false, message: 'Body JSON invalido.' }, 400);
-  }
+// 🟡 POST - Crear nuevo producto
+export const POST: APIRoute = async ({ request }) => {
+  try {
+    const payload = await parseOverrideBody(request);
+    if (!payload) {
+      return jsonResponse({ success: false, message: 'Body JSON invalido.' }, 400);
+    }
 
-  const gameSlug = getStringField(payload.gameSlug);
-  const productLabel = getStringField(payload.productLabel);
+    const gameSlug = getStringField(payload.gameSlug);
+    const productLabel = getStringField(payload.productLabel);
+    const usd = getNumberField(payload.usd);
+    const active = getBooleanField(payload.active);
+    const imagen_url = getStringField(payload.imagen_url) || null;
 
-  if (!gameSlug || !productLabel) {
-    return jsonResponse({ success: false, message: 'Datos invalidos para eliminar producto.' }, 400);
-  }
+    if (!gameSlug || !productLabel || usd === null || active === null) {
+      return jsonResponse({ 
+        success: false, 
+        message: 'Datos invalidos para crear producto.' 
+      }, 400);
+    }
 
-  const { overrides, game, product } = await getProductContext(gameSlug, productLabel);
-  if (!game) {
-    return jsonResponse({ success: false, message: 'Juego no encontrado.' }, 404);
-  }
+    // Verificar si ya existe
+    const { data: existing } = await supabase
+      .from('productos')
+      .select('id')
+      .eq('game_slug', gameSlug)
+      .eq('product_label', productLabel)
+      .single();
 
-  if (!product) {
-    return jsonResponse({ success: false, message: 'Producto no encontrado para este juego.' }, 404);
-  }
+    if (existing) {
+      return jsonResponse({ 
+        success: false, 
+        message: 'Ya existe un producto con ese nombre en este juego.' 
+      }, 409);
+    }
 
-  const baseGame = games.find((item) => item.slug === gameSlug);
-  const isBaseProduct = baseGame?.products.some((item) => item.label === productLabel) ?? false;
-
-  const nextOverrides = overrides.filter(
-    (item) => !(item.gameSlug === gameSlug && item.productLabel === productLabel),
-  );
-
-  if (isBaseProduct) {
-    nextOverrides.push({
+    const newProduct: ProductOverride = {
       gameSlug,
       productLabel,
-      usd: product.usd,
+      usd,
       stock: 0,
-      active: false,
-      deleted: true,
-    });
+      active,
+      imagen_url: imagen_url || undefined
+    };
+
+    await saveProductToSupabase(newProduct);
+    return jsonResponse({ 
+      success: true, 
+      message: 'Producto creado.', 
+      product: newProduct 
+    }, 201);
+
+  } catch (error) {
+    console.error('Error en POST productos:', error);
+    return jsonResponse({ 
+      success: false, 
+      message: 'Error interno al crear producto' 
+    }, 500);
   }
+};
 
-  await saveProductOverrides(nextOverrides);
+// 🔵 PUT - Actualizar producto existente
+export const PUT: APIRoute = async ({ request }) => {
+  try {
+    const payload = await parseOverrideBody(request);
+    if (!payload) {
+      return jsonResponse({ success: false, message: 'Body JSON invalido.' }, 400);
+    }
 
-  return jsonResponse({ success: true, message: 'Producto eliminado.' }, 200);
+    const gameSlug = getStringField(payload.gameSlug);
+    const productLabel = getStringField(payload.productLabel);
+    const usd = getNumberField(payload.usd);
+    const active = getBooleanField(payload.active);
+    const imagen_url = getStringField(payload.imagen_url) || null;
+
+    if (!gameSlug || !productLabel || usd === null || active === null) {
+      return jsonResponse({ 
+        success: false, 
+        message: 'Datos invalidos para actualizar producto.' 
+      }, 400);
+    }
+
+    // Verificar si existe
+    const { data: existing, error: findError } = await supabase
+      .from('productos')
+      .select('id')
+      .eq('game_slug', gameSlug)
+      .eq('product_label', productLabel)
+      .single();
+
+    if (findError || !existing) {
+      return jsonResponse({ 
+        success: false, 
+        message: 'Producto no encontrado.' 
+      }, 404);
+    }
+
+    const updatedProduct: ProductOverride = {
+      gameSlug,
+      productLabel,
+      usd,
+      stock: 0,
+      active,
+      imagen_url: imagen_url || undefined
+    };
+
+    await saveProductToSupabase(updatedProduct);
+    return jsonResponse({ 
+      success: true, 
+      message: 'Producto actualizado.', 
+      product: updatedProduct 
+    }, 200);
+
+  } catch (error) {
+    console.error('Error en PUT productos:', error);
+    return jsonResponse({ 
+      success: false, 
+      message: 'Error interno al actualizar producto' 
+    }, 500);
+  }
+};
+
+// 🔴 DELETE - Eliminar producto (soft delete)
+export const DELETE: APIRoute = async ({ request }) => {
+  try {
+    const payload = await parseOverrideBody(request);
+    if (!payload) {
+      return jsonResponse({ success: false, message: 'Body JSON invalido.' }, 400);
+    }
+
+    const gameSlug = getStringField(payload.gameSlug);
+    const productLabel = getStringField(payload.productLabel);
+
+    if (!gameSlug || !productLabel) {
+      return jsonResponse({ 
+        success: false, 
+        message: 'Datos invalidos para eliminar producto.' 
+      }, 400);
+    }
+
+    // Verificar si existe
+    const { data: existing, error: findError } = await supabase
+      .from('productos')
+      .select('id')
+      .eq('game_slug', gameSlug)
+      .eq('product_label', productLabel)
+      .single();
+
+    if (findError || !existing) {
+      return jsonResponse({ 
+        success: false, 
+        message: 'Producto no encontrado.' 
+      }, 404);
+    }
+
+    await deleteProductFromSupabase(gameSlug, productLabel);
+    return jsonResponse({ 
+      success: true, 
+      message: 'Producto eliminado.' 
+    }, 200);
+
+  } catch (error) {
+    console.error('Error en DELETE productos:', error);
+    return jsonResponse({ 
+      success: false, 
+      message: 'Error interno al eliminar producto' 
+    }, 500);
+  }
 };
