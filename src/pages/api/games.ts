@@ -92,7 +92,19 @@ export const PUT: APIRoute = async ({ request }) => {
     });
 
   if (uploadError) {
-    return jsonResponse({ success: false, message: 'No se pudo subir la portada a Supabase.' }, 500);
+    return jsonResponse(
+      {
+        success: false,
+        message: 'No se pudo subir la portada a Supabase.',
+        details: {
+          bucket: 'game-covers',
+          path: fileName,
+          code: uploadError.name ?? null,
+          error: uploadError.message ?? String(uploadError),
+        },
+      },
+      500,
+    );
   }
 
   const { data: publicUrlData } = supabaseServer.storage.from('game-covers').getPublicUrl(fileName);
@@ -112,7 +124,22 @@ export const PUT: APIRoute = async ({ request }) => {
     deleted: false,
   });
 
-  await saveGameOverrides(nextOverrides);
+  try {
+    await saveGameOverrides(nextOverrides);
+  } catch (error) {
+    return jsonResponse(
+      {
+        success: false,
+        message: 'La portada se subio, pero no se pudo guardar en base de datos.',
+        details: {
+          gameSlug,
+          image,
+          error: error instanceof Error ? error.message : String(error),
+        },
+      },
+      500,
+    );
+  }
 
   return jsonResponse({ success: true, message: 'Portada actualizada.', gameSlug, image }, 200);
 };
