@@ -6,7 +6,7 @@ declare global {
   var __astroWebPgPool: Pool | undefined;
 }
 
-const connectionString = process.env.DATABASE_URL?.trim() ?? '';
+const connectionString = import.meta.env.DATABASE_URL?.trim() || process.env.DATABASE_URL?.trim() || '';
 const hasDatabaseUrl = connectionString.length > 0;
 
 const createPool = () =>
