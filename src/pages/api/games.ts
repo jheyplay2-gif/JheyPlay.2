@@ -6,6 +6,7 @@ import {
   listGameOverrides,
   saveGameOverrides,
   saveProductOverrides,
+  upsertGameOverride,
 } from '../../data/store';
 
 const jsonHeaders = { 'Content-Type': 'application/json' };
@@ -18,6 +19,7 @@ const jsonResponse = (body: Record<string, unknown>, status: number) =>
 
 const MAX_IMAGE_SIZE_BYTES = 5 * 1024 * 1024;
 const DEFAULT_GAME_IMAGE = '/games/default-game-cover.svg';
+const GAME_COVER_BUCKETS = ['game-covers', 'productos'];
 const MIME_TO_EXTENSION: Record<string, string> = {
   'image/jpeg': 'jpg',
   'image/png': 'png',
@@ -83,31 +85,44 @@ export const PUT: APIRoute = async ({ request }) => {
   const safeSlug = gameSlug.replace(/[^a-z0-9-]/gi, '-').toLowerCase();
   const fileName = `${safeSlug}/${Date.now()}.${extension}`;
 
-  const { error: uploadError } = await supabaseServer.storage
-    .from('game-covers')
-    .upload(fileName, imageField, {
-      cacheControl: '3600',
-      upsert: true,
-      contentType: imageField.type,
-    });
+  let uploadBucket = '';
+  let uploadError: Error | null = null;
 
-  if (uploadError) {
+  for (const bucketName of GAME_COVER_BUCKETS) {
+    const { error } = await supabaseServer.storage
+      .from(bucketName)
+      .upload(fileName, imageField, {
+        cacheControl: '3600',
+        upsert: true,
+        contentType: imageField.type,
+      });
+
+    if (!error) {
+      uploadBucket = bucketName;
+      uploadError = null;
+      break;
+    }
+
+    uploadError = error;
+  }
+
+  if (uploadError || !uploadBucket) {
     return jsonResponse(
       {
         success: false,
         message: 'No se pudo subir la portada a Supabase.',
         details: {
-          bucket: 'game-covers',
+          bucketsAttempted: GAME_COVER_BUCKETS,
           path: fileName,
-          code: uploadError.name ?? null,
-          error: uploadError.message ?? String(uploadError),
+          code: uploadError?.name ?? null,
+          error: uploadError?.message ?? String(uploadError),
         },
       },
       500,
     );
   }
 
-  const { data: publicUrlData } = supabaseServer.storage.from('game-covers').getPublicUrl(fileName);
+  const { data: publicUrlData } = supabaseServer.storage.from(uploadBucket).getPublicUrl(fileName);
   const image = publicUrlData.publicUrl;
 
   if (!image) {
@@ -115,17 +130,15 @@ export const PUT: APIRoute = async ({ request }) => {
   }
 
   const previousOverride = gameOverrides.find((item) => item.gameSlug === gameSlug);
-  const nextOverrides = gameOverrides.filter((item) => item.gameSlug !== gameSlug);
-
-  nextOverrides.push({
+  const nextOverride = {
     ...previousOverride,
     gameSlug,
     image,
     deleted: false,
-  });
+  };
 
   try {
-    await saveGameOverrides(nextOverrides);
+    await upsertGameOverride(nextOverride);
   } catch (error) {
     return jsonResponse(
       {
@@ -141,7 +154,7 @@ export const PUT: APIRoute = async ({ request }) => {
     );
   }
 
-  return jsonResponse({ success: true, message: 'Portada actualizada.', gameSlug, image }, 200);
+  return jsonResponse({ success: true, message: 'Portada actualizada.', gameSlug, image, bucket: uploadBucket }, 200);
 };
 
 export const POST: APIRoute = async ({ request }) => {

@@ -577,7 +577,8 @@ import Layout from '../../layouts/Layout.astro';
 
           const data = await response.json();
           if (!response.ok || !data.success) {
-            throw new Error(data.message ?? 'No se pudo actualizar la portada.');
+            const detail = data?.details?.error ? ` (${data.details.error})` : '';
+            throw new Error(`${data.message ?? 'No se pudo actualizar la portada.'}${detail}`);
           }
 
           setMessage(productsMessage, `Portada actualizada para ${gameSlug}.`);

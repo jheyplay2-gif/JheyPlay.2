@@ -277,6 +277,39 @@ export const saveGameOverrides = async (rows: GameOverride[]) => {
   await replaceRows('game_overrides', rows);
 };
 
+export const upsertGameOverride = async (row: GameOverride) => {
+  if (!isDatabaseConfigured()) {
+    const rows = await listGameOverrides();
+    const nextRows = rows.filter((item) => item.gameSlug !== row.gameSlug);
+    nextRows.push(row);
+    await writeJsonFile(gamesOverrideFilePath, nextRows);
+    return;
+  }
+
+  await queryDatabase(
+    `
+      INSERT INTO game_overrides (game_slug, image, name, description, custom, deleted, updated_at)
+      VALUES ($1, $2, $3, $4, $5, $6, NOW())
+      ON CONFLICT (game_slug)
+      DO UPDATE SET
+        image = EXCLUDED.image,
+        name = EXCLUDED.name,
+        description = EXCLUDED.description,
+        custom = EXCLUDED.custom,
+        deleted = EXCLUDED.deleted,
+        updated_at = NOW()
+    `,
+    [
+      row.gameSlug,
+      row.image ?? null,
+      row.name ?? null,
+      row.description ?? null,
+      row.custom ?? false,
+      row.deleted ?? false,
+    ],
+  );
+};
+
 export const listProductOverrides = async (): Promise<ProductOverride[]> => {
   if (!isDatabaseConfigured()) {
     const content = await readJsonFile<unknown[]>(productsOverrideFilePath, []);
