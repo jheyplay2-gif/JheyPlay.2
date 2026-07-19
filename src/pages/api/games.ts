@@ -53,7 +53,7 @@ export const GET: APIRoute = async () => {
   return jsonResponse({ success: true, games: mergedGames, exchangeRate }, 200);
 };
 
-export const PUT: APIRoute = async ({ request }) => {
+const handleCoverUpdate = async (request: Request) => {
   const formData = await request.formData();
   const gameSlugField = formData.get('gameSlug');
   const imageField = formData.get('coverImage');
@@ -157,7 +157,14 @@ export const PUT: APIRoute = async ({ request }) => {
   return jsonResponse({ success: true, message: 'Portada actualizada.', gameSlug, image, bucket: uploadBucket }, 200);
 };
 
+export const PUT: APIRoute = async ({ request }) => handleCoverUpdate(request);
+
 export const POST: APIRoute = async ({ request }) => {
+  const contentType = request.headers.get('content-type') ?? '';
+  if (contentType.includes('multipart/form-data')) {
+    return handleCoverUpdate(request);
+  }
+
   let payload: CreateGamePayload;
 
   try {

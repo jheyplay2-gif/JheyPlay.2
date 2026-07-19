@@ -571,14 +571,25 @@ import Layout from '../../layouts/Layout.astro';
           body.append('coverImage', imageFile);
 
           const response = await fetch('/api/games', {
-            method: 'PUT',
+            method: 'POST',
             body,
           });
 
-          const data = await response.json();
-          if (!response.ok || !data.success) {
+          const raw = await response.text();
+          let data = null;
+
+          try {
+            data = JSON.parse(raw);
+          } catch {
+            data = null;
+          }
+
+          if (!response.ok || !data?.success) {
+            const fallbackMessage = raw && raw.trim().length > 0
+              ? raw.trim()
+              : `Error HTTP ${response.status}`;
             const detail = data?.details?.error ? ` (${data.details.error})` : '';
-            throw new Error(`${data.message ?? 'No se pudo actualizar la portada.'}${detail}`);
+            throw new Error(`${data?.message ?? fallbackMessage}${detail}`);
           }
 
           setMessage(productsMessage, `Portada actualizada para ${gameSlug}.`);
