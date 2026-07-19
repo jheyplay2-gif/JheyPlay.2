@@ -79,7 +79,17 @@ const handleCoverUpdate = async (request: Request) => {
   const [{ mergedGames }, gameOverrides] = await Promise.all([getMergedGames(), listGameOverrides()]);
   const game = mergedGames.find((item) => item.slug === gameSlug);
   if (!game) {
-    return jsonResponse({ success: false, message: 'Juego no encontrado.' }, 404);
+    return jsonResponse(
+      {
+        success: false,
+        message: 'Juego no encontrado en la fuente activa de datos (PostgreSQL/overrides).',
+        details: {
+          gameSlug,
+          hint: 'Sincroniza data/games-override.json hacia PostgreSQL si este juego existia solo en JSON.',
+        },
+      },
+      404,
+    );
   }
 
   const safeSlug = gameSlug.replace(/[^a-z0-9-]/gi, '-').toLowerCase();

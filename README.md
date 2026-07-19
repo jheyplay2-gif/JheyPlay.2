@@ -1,47 +1,24 @@
-# Astro Starter Kit: Basics
+# Jhey Play
 
-```sh
-npm create astro@latest -- --template basics
-```
+Sitio web en Astro para catálogo de juegos, pedidos por WhatsApp y panel de administración.
 
-> 🧑‍🚀 **Seasoned astronaut?** Delete this file. Have fun!
+## Estructura
 
-## 🚀 Project Structure
+- `src/pages/index.astro`: home con el catálogo.
+- `src/pages/juegos/[slug].astro`: página de compra por juego.
+- `src/pages/admin/index.astro`: panel de administración.
+- `src/pages/api/*`: endpoints para juegos, productos, tasa y órdenes.
+- `src/data/store.ts`: capa de persistencia con fallback a JSON cuando no hay PostgreSQL.
+- `database/postgres-schema.sql`: esquema base de la base de datos.
 
-Inside of your Astro project, you'll see the following folders and files:
+## Comandos
 
-```text
-/
-├── public/
-│   └── favicon.svg
-├── src
-│   ├── assets
-│   │   └── astro.svg
-│   ├── components
-│   │   └── Welcome.astro
-│   ├── layouts
-│   │   └── Layout.astro
-│   └── pages
-│       └── index.astro
-└── package.json
-```
+- `npm run dev`: arranca el servidor de desarrollo.
+- `npm run build`: compila la app para producción.
+- `npm run preview`: previsualiza la build localmente.
+- `npm run db:setup`: aplica esquema e importa datos iniciales si hay `DATABASE_URL`.
 
-To learn more about the folder structure of an Astro project, refer to [our guide on project structure](https://docs.astro.build/en/basics/project-structure/).
+## Notas
 
-## 🧞 Commands
-
-All commands are run from the root of the project, from a terminal:
-
-| Command                   | Action                                           |
-| :------------------------ | :----------------------------------------------- |
-| `npm install`             | Installs dependencies                            |
-| `npm run dev`             | Starts local dev server at `localhost:4321`      |
-| `npm run build`           | Build your production site to `./dist/`          |
-| `npm run preview`         | Preview your build locally, before deploying     |
-| `npm run astro ...`       | Run CLI commands like `astro add`, `astro check` |
-| `npm run astro -- --help` | Get help using the Astro CLI                     |
-
-## 👀 Want to learn more?
-
-Feel free to check [our documentation](https://docs.astro.build) or jump into our [Discord server](https://astro.build/chat).
-"# JheyPlay.2" 
+- El proyecto usa salida `server` con `@astrojs/node`.
+- Si PowerShell bloquea `npm`, usa `cmd /c npm run build`.

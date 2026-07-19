@@ -1,34 +1,50 @@
-// src/middleware.ts
 import { defineMiddleware } from 'astro:middleware';
 
 export const onRequest = defineMiddleware((context, next) => {
-  // Solo protegemos las rutas que empiezan con /admin
   if (context.url.pathname.startsWith('/admin')) {
     const auth = context.request.headers.get('authorization');
-    
-    if (!auth) {
+
+    if (!auth || !auth.startsWith('Basic ')) {
       return new Response('Necesitas autenticarte', {
         status: 401,
         headers: {
-          'WWW-Authenticate': 'Basic realm="Zona de Administración"'
-        }
+          'WWW-Authenticate': 'Basic realm="Zona de Administración"',
+        },
       });
     }
-    
-    // Decodificamos el usuario y contraseña
-    const [user, pass] = atob(auth.split(' ')[1]).split(':');
+
     const validUser = import.meta.env.ADMIN_USER;
     const validPass = import.meta.env.ADMIN_PASS;
-    
-    if (user !== validUser || pass !== validPass) {
-      return new Response('Credenciales incorrectas', {
+
+    try {
+      const encodedCredentials = auth.slice(6).trim();
+      const decodedCredentials = atob(encodedCredentials);
+      const separatorIndex = decodedCredentials.indexOf(':');
+
+      if (separatorIndex <= 0) {
+        throw new Error('Invalid basic auth format');
+      }
+
+      const user = decodedCredentials.slice(0, separatorIndex);
+      const pass = decodedCredentials.slice(separatorIndex + 1);
+
+      if (user !== validUser || pass !== validPass) {
+        return new Response('Credenciales incorrectas', {
+          status: 401,
+          headers: {
+            'WWW-Authenticate': 'Basic realm="Zona de Administración"',
+          },
+        });
+      }
+    } catch {
+      return new Response('Necesitas autenticarte', {
         status: 401,
         headers: {
-          'WWW-Authenticate': 'Basic realm="Zona de Administración"'
-        }
+          'WWW-Authenticate': 'Basic realm="Zona de Administración"',
+        },
       });
     }
   }
-  
+
   return next();
 });

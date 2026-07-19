@@ -4,25 +4,43 @@ declare global {
   // Reuse the same pool across hot reloads during development.
   // eslint-disable-next-line no-var
   var __astroWebPgPool: Pool | undefined;
+  // Track which connection string initialized the pool.
+  // eslint-disable-next-line no-var
+  var __astroWebPgPoolConnectionString: string | undefined;
 }
 
-const connectionString = import.meta.env.DATABASE_URL?.trim() || process.env.DATABASE_URL?.trim() || '';
-const hasDatabaseUrl = connectionString.length > 0;
+const getConnectionString = () => {
+  const fromAstro = import.meta.env.DATABASE_URL?.trim() ?? '';
+  if (fromAstro.length > 0) {
+    return fromAstro;
+  }
 
-const createPool = () =>
+  const fromProcess = process.env.DATABASE_URL?.trim() ?? '';
+  return fromProcess;
+};
+
+const createPool = (connectionString: string) =>
   new Pool({
     connectionString,
     ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : undefined,
   });
 
-export const isDatabaseConfigured = () => hasDatabaseUrl;
+export const isDatabaseConfigured = () => getConnectionString().length > 0;
 
 export const getPool = () => {
-  if (!hasDatabaseUrl) {
+  const connectionString = getConnectionString();
+  if (!connectionString) {
     throw new Error('DATABASE_URL no esta configurada.');
   }
 
-  globalThis.__astroWebPgPool ??= createPool();
+  const poolNeedsRefresh = !globalThis.__astroWebPgPool
+    || globalThis.__astroWebPgPoolConnectionString !== connectionString;
+
+  if (poolNeedsRefresh) {
+    globalThis.__astroWebPgPool = createPool(connectionString);
+    globalThis.__astroWebPgPoolConnectionString = connectionString;
+  }
+
   return globalThis.__astroWebPgPool;
 };
 

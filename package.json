@@ -13,6 +13,7 @@
     "astro": "astro",
     "db:schema": "node --env-file=.env ./scripts/apply-postgres-schema.mjs",
     "db:import": "node --env-file=.env ./scripts/import-json-to-postgres.mjs",
+    "db:sync:games": "node --env-file=.env ./scripts/sync-game-overrides-to-postgres.mjs",
     "db:setup": "npm run db:schema && npm run db:import"
   },
   "dependencies": {
